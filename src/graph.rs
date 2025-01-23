@@ -41,7 +41,17 @@ pub struct NodeID(pub i64); // struct tuple, with only one element
 // directed graph (undirected)
 pub struct Graph {
     // for every node, its adjacent edges
+    // implementation detail
     adj_edges: HashMap<NodeID, Vec<Edge>> // node id -> list of edge id
+}
+
+impl Graph {
+    // constructor function
+    pub fn new(adj_edges: HashMap<NodeID, Vec<Edge>>) -> Self {
+        Graph {
+            adj_edges 
+        }
+    } 
 }
 
 // if a type is not `Copy`-able, it's moved when assign or passed as parameter to function
@@ -50,6 +60,9 @@ pub struct Graph {
 // &[T] vs. [T] // [T] a contingous region of memeory: Dynamic sized type, compiler don't know their size at compile-time
 // &[T] // fixed sized type, which is just 16bytes: 8bytes for length of slice, 8bytes for pointer to memory region.
 impl Graph {
+    pub fn for_each_node(&self) -> impl Iterator<Item = &NodeID>{
+        self.adj_edges.keys()
+    }
     pub fn adjacent_edges(&self, nodeId : NodeID) -> Option<&Vec<Edge>> /* Option<&[Edge]> */ { // zero length
         self.adj_edges.get(&nodeId)
     }
@@ -65,7 +78,7 @@ struct EdgeID(i64);
 
 // only travel from <from_node> to <to_node>
 pub struct Edge {
-    id: EdgeID,
-    from_node: NodeID,
-    to_node: NodeID,
+    // id: EdgeID,
+    pub from_node: NodeID,
+    pub to_node: NodeID,
 }
