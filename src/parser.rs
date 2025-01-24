@@ -6,6 +6,7 @@
 use std::{collections::HashMap, fmt::Debug, ptr::read};
 
 use osmpbf::{Element, ElementReader};
+use rstar::{primitives::GeomWithData, RTree};
 use crate::graph::{self, Edge, Graph, LatLon, Node, NodeID};
 
 #[derive(Debug)]
@@ -23,8 +24,9 @@ enum ParseError {
 //     }
 // }
 
+type NodeLocation = GeomWithData<[f64; 2], NodeID>;
 // the user/caller of this function can tell what errors happens
-fn parse_map(map_file:&str) -> Result<Graph, ParseError> {
+fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseError> {
     let reader = ElementReader::from_path(map_file).unwrap();
 
     let mut nodes = HashMap::new();
@@ -37,9 +39,17 @@ fn parse_map(map_file:&str) -> Result<Graph, ParseError> {
     // count neighbor node number of every node, if the number is 2, then it's shape node, not useful for routing.
 
     let ways: HashMap<i64, Vec<i64>> = HashMap::new(); // convert way to edges of Graph.
+    
+    // let mut tree = RTree::new();
+
+    let mut node_locations = Vec::new();
+
+
+
+    let mut node_count = 0;
     reader.for_each(|element| {
         match element {
-            Element::Node ( node  ) => {
+            Element::DenseNode ( node  ) => {
                 let node_object = Node {
                     id: NodeID(node.id()),
                     location: LatLon {
@@ -47,6 +57,18 @@ fn parse_map(map_file:&str) -> Result<Graph, ParseError> {
                         lon: node.lon()
                     }
                 };
+
+                node_count+=1;
+                if node_count % 100000==0 {
+                    println!("== sample node: {} {}", node.lon(), node.lat());
+                }
+
+                // lat -> y, lon -> x,
+                // spehre coordinate (lat/lon), 
+                // 2d coordinate (y/x)
+                // computation intensive
+
+                node_locations.push(NodeLocation::new( [ node.lon(), node.lat() ], NodeID(node.id()) ));
 
                 nodes.insert(node_object.id, node_object);
             }
@@ -95,8 +117,11 @@ fn parse_map(map_file:&str) -> Result<Graph, ParseError> {
         }
     }).map_err(|e| ParseError::OSMPBFError(e))?;
 
+    let tree =  RTree::bulk_load(node_locations);
+
+
     let graph = Graph::new(adj_edges);
-    Ok(graph)
+    Ok((graph, tree))
     // build graph
 }
 
@@ -123,10 +148,20 @@ mod tests {
 
     #[test]
     fn test_parsed_map() {
-        let graph = parse_map("./data/delaware-latest.osm.pbf").unwrap();
+        // destructuring syntax
+        // pattern matching: everywhere
+        let (graph, tree) = parse_map("./data/delaware-latest.osm.pbf").unwrap();
 
         let mut total_nodes = 0;
         let mut total_edges = 0;
+
+        let my_location = [-75.384600, 38.691489];
+
+        let nearest_node = tree.nearest_neighbor(&my_location).unwrap();
+        println!("Node ID: {:?}", nearest_node.data);
+
+        // {} : type implements std::fmt::Display trait
+        // {:?}: type .. std::fmt::Debug / Debug
 
         for node_id in graph.for_each_node() {
             total_nodes += 1;

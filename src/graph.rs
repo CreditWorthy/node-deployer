@@ -1,7 +1,8 @@
 use std::collections::HashMap;
+use rstar::Point;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct LatLon {
     pub lat: f64,
     pub lon: f64,
@@ -68,10 +69,82 @@ impl Graph {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Node {
     pub id : NodeID,
     pub location : LatLon
 }
+
+
+
+// // graph familiy 2
+// struct Node2;
+// struct Edge2;
+// struct Graph2;
+
+// // graph familiy 3
+// struct Node3;
+// struct Edge3;
+// struct Graph3; // GraphGeneric<Node3, Edge3>  generic type instantiation
+
+// // GraphGeneric<Node2, Edge3>
+
+// // trait's associated type
+
+// struct GraphGeneric<N, E>{nodes:Vec<N>, edges:Vec<E>}
+
+// // impl GraphTrait for Graph2 {
+
+// // }
+
+// trait GraphTrait {
+//     type Node;
+//     type Edge;
+
+//     fn all_nodes(&self) -> Vec<Self::Node>;
+// }
+
+// impl GraphTrait for Graph3 {
+//     type Node = Node3;
+//     type Edge = Edge3;
+
+//     fn all_nodes(&self) -> Vec<Self::Node> {
+//         todo!()
+//     }
+// }
+
+// // 1-to-1 relation between Node2/Edge2/Graph2
+// impl GraphTrait for Graph2 {
+//     type Node = Node2;
+//     type Edge = Edge2;
+
+//     fn all_nodes(&self) -> Vec<Self::Node> {
+//         todo!()
+//     }
+// }
+
+// // generic + trait
+
+// // trait bound
+// fn generic_func<G: GraphTrait>(g: G) {
+//     // what to do with `t`?
+//     let nodes = g.all_nodes();
+    
+//     // Vec<<G as GraphTrait>::Node>
+//     // compiler doesn't know the concrete Node type here.
+// }
+
+// fn generic_func2(g: GraphGeneric<N, E>) {
+    
+// }
+
+
+
+// // #[test]
+// // fn test_generic() {
+// // //     let gx= GraphGeneric{nodes: Vec::<Node2>::new(), edges:Vec::<Edge3>::new()};
+// // //    generic_func(gx);
+// // }
 
 #[derive(Clone)]
 struct EdgeID(i64);
