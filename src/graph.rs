@@ -1,6 +1,30 @@
-use std::collections::HashMap;
+use core::f64;
+use std::{cmp::Reverse, collections::{BinaryHeap, HashMap}};
 use rstar::Point;
 use serde::{Deserialize, Serialize};
+
+// depth-first search
+// breadth-first search
+// shortest-path algorithm: Dijkstra (given two node s = start/source, t = target, shortest: summation of all weights on edges along the path, find the smallest one)
+
+// 25 which is 5 groups , each group 5 studuents
+// group 1: a b c d e
+// group 2: f g h i j
+// group 3: k l m n o
+// group 4: p q r s t
+// group 5: u v w x y
+
+// 1st step:
+//   we have 5 run: to find the ordering of each group 
+// 2nd step:
+//   let 5 (a f k p u) to run: a is fastest, f is 2nd place (it maybe not the 2nd in 25 students)
+// 3 step: find out 2nd in total/25 studuent:
+//   let 5 (b f k p u) to run again: b is fastest , no other can be fastest.
+// 4 step: find the 3rd in total:
+//   c f k p u 
+
+// total orderings of 25 students
+// think the track (5 lanes) as a priority queue with limited capacity
 
 #[derive(Copy, Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct LatLon {
@@ -34,16 +58,10 @@ struct X(i64, u8, String);
 
 
 // newtype pattern in rust
-#[derive(Hash, Eq, PartialEq, Debug, Clone, Copy)]
-pub struct NodeID(pub i64); // struct tuple, with only one element
-
-// &NodeID is 8 bytes (underlying is pointer: usize which 64bit )
-
-// directed graph (undirected)
+#[derive(Hash, Eq, PartialEq, PartialOrd, Debug, Clone, Copy)]
+pub struct NodeID(pub i64); 
 pub struct Graph {
-    // for every node, its adjacent edges
-    // implementation detail
-    adj_edges: HashMap<NodeID, Vec<Edge>> // node id -> list of edge id
+    adj_edges: HashMap<NodeID, Vec<Edge>> 
 }
 
 impl Graph {
@@ -55,11 +73,6 @@ impl Graph {
     } 
 }
 
-// if a type is not `Copy`-able, it's moved when assign or passed as parameter to function
-
-// &Vec<T> vs. &[T] // slice of T 
-// &[T] vs. [T] // [T] a contingous region of memeory: Dynamic sized type, compiler don't know their size at compile-time
-// &[T] // fixed sized type, which is just 16bytes: 8bytes for length of slice, 8bytes for pointer to memory region.
 impl Graph {
     pub fn for_each_node(&self) -> impl Iterator<Item = &NodeID>{
         self.adj_edges.keys()
@@ -76,76 +89,6 @@ pub struct Node {
 }
 
 
-
-// // graph familiy 2
-// struct Node2;
-// struct Edge2;
-// struct Graph2;
-
-// // graph familiy 3
-// struct Node3;
-// struct Edge3;
-// struct Graph3; // GraphGeneric<Node3, Edge3>  generic type instantiation
-
-// // GraphGeneric<Node2, Edge3>
-
-// // trait's associated type
-
-// struct GraphGeneric<N, E>{nodes:Vec<N>, edges:Vec<E>}
-
-// // impl GraphTrait for Graph2 {
-
-// // }
-
-// trait GraphTrait {
-//     type Node;
-//     type Edge;
-
-//     fn all_nodes(&self) -> Vec<Self::Node>;
-// }
-
-// impl GraphTrait for Graph3 {
-//     type Node = Node3;
-//     type Edge = Edge3;
-
-//     fn all_nodes(&self) -> Vec<Self::Node> {
-//         todo!()
-//     }
-// }
-
-// // 1-to-1 relation between Node2/Edge2/Graph2
-// impl GraphTrait for Graph2 {
-//     type Node = Node2;
-//     type Edge = Edge2;
-
-//     fn all_nodes(&self) -> Vec<Self::Node> {
-//         todo!()
-//     }
-// }
-
-// // generic + trait
-
-// // trait bound
-// fn generic_func<G: GraphTrait>(g: G) {
-//     // what to do with `t`?
-//     let nodes = g.all_nodes();
-    
-//     // Vec<<G as GraphTrait>::Node>
-//     // compiler doesn't know the concrete Node type here.
-// }
-
-// fn generic_func2(g: GraphGeneric<N, E>) {
-    
-// }
-
-
-
-// // #[test]
-// // fn test_generic() {
-// // //     let gx= GraphGeneric{nodes: Vec::<Node2>::new(), edges:Vec::<Edge3>::new()};
-// // //    generic_func(gx);
-// // }
-
 #[derive(Clone)]
 struct EdgeID(i64);
 
@@ -154,4 +97,153 @@ pub struct Edge {
     // id: EdgeID,
     pub from_node: NodeID,
     pub to_node: NodeID,
+    pub distance: f64,
+}
+
+pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>), ()> {
+    // find out all shortest path to all nodes
+    
+    // tentative 
+    // dist: node id v -> tentative shortest distance to v from start node s.
+    // prev: node id v -> previous node id w, through which we can reach to v, has the shortest distance. 
+    //       used to recover the path detail (all nodes passed on shortest path)
+
+    #[derive(PartialEq, PartialOrd)]
+    struct PQItem {
+        id: NodeID,
+        distance: f64,
+    }
+
+    // PartialOrd trait: f64 indeed implemented
+    // f64::Nan
+
+    impl Ord for PQItem {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            // will return none if comparing f64::Nan with some other f64
+            // self.distance.partial_cmp(&other.distance).unwrap() if self > other return Some(Greater)
+            other.distance.partial_cmp(&self.distance).unwrap() // unwrap() panic on the None
+        }
+    }
+
+    impl Eq for PQItem {}
+
+    let mut dist:HashMap<NodeID, f64> = HashMap::new();
+    let mut prev:HashMap<NodeID, Option<NodeID>> = HashMap::new();
+
+    // priority queue: allows us to query the node with the "tentative" shortest distance (fast)
+    // pq . find_smallest() -> related node/item which has the smallest value.
+    let mut pq:BinaryHeap<PQItem> = BinaryHeap::new();
+
+    // float number: Nan - not a number
+    // f64::NAN > 1.0; // compare it with other f64
+
+    // wikipedia version is to find shortest paths to all nodes.
+    // 3      for each vertex v in Graph.Vertices:
+    // 4          dist[v] ← INFINITY
+    // 5          prev[v] ← UNDEFINED
+    // 6          add v to Q
+    // 7      dist[source] ← 0
+
+    // 9      while Q is not empty:
+    // 10          u ← vertex in Q with minimum dist[u]
+    // 11          remove u from Q
+    // 12         
+    // 13          for each neighbor v of u still in Q:
+    // 14              alt ← dist[u] + Graph.Edges(u, v)
+    // 15              if alt < dist[v]:
+    // 16                  dist[v] ← alt
+    // 17                  prev[v] ← u
+    // 18
+
+    for &node in g.for_each_node() {
+        // dist.insert(node, f64::INFINITY); // or just leave it alone. because if some node not exist in dist, it means infinite
+        prev.insert(node, None);
+        pq.push(PQItem{id: node, distance: f64::INFINITY });
+    }
+    dist.insert(s, 0.0);
+    pq.push(PQItem { id: s, distance: 0.0 });
+
+    let mut count = 0;
+    while let Some(item) = pq.pop() {
+        count+=1;
+        if count % 10000 ==0 {
+            println!("visited {} nodes", count);
+        }
+
+        let u = item.id;
+        if u == t {
+            println!("=== target found: build path");
+            let mut path = Vec::new();
+            let mut current = Some(t);
+            while let Some(node) = current { // loop until None (the last node (start node) has no prev node )
+                path.push(node);
+                current = prev[&node];
+            }
+            path.reverse();
+
+            // dist[t]
+            return Ok(( item.distance, path )) 
+        }
+
+        let dist_to_u = item.distance; // distance from `s` to `u`
+        
+        // pop out node is: u
+        if let Some(edges) = g.adjacent_edges(u) {
+            for edge in edges {
+                let v = edge.to_node;
+                
+                // u's adjacent edges.
+                // for each adj edge, edge.to_node should be: v
+                // at least there is a path to v through u: s -> ... -> u -> v.
+                // for that path, the total cost/distance from start node `s` to `v` is: distance to u + edge (u -> v) distance 
+                let dist_to_v_through_u = dist_to_u + edge.distance;
+
+                // dist[&v]: distance to `v` throught some other ways/path already exist
+
+                // Two cases:
+                // 1. dist_to_v_through_u >. 
+
+                if dist.contains_key(&v) {
+                    // indeed there is already some other path to `v` (not through `u`).
+                   // compare distances of that other path (not through `u`) and current path to `v` through `u`.
+                    if dist_to_v_through_u < dist[&v] {
+                        dist.insert(v, dist_to_v_through_u);
+                        prev.insert(v, Some(u));
+                        pq.push(PQItem{ distance: dist_to_v_through_u, id: edge.to_node });
+                    } else {
+                        // do nothing here. no need to update with a worse path.
+                    }
+                } else {
+                    // no existing path to `v` found yet.
+                    dist.insert(v, dist_to_v_through_u);
+                    prev.insert(v, Some(u));
+                    pq.push(PQItem{ distance: dist_to_v_through_u, id: edge.to_node });
+                }
+            }
+        }
+    }
+
+    
+
+
+
+    // dist[start] = 0
+    // prev[start] = None
+
+    // initial:
+    // we can assume/fill the infinite as the tentative shortest distance to all other nodes (except start node)
+    // prev[x] = None
+
+
+    
+
+
+    Err(())
+    // in each step: find the shortest path to some node.
+}
+
+#[test]
+fn test_f64() {
+    println!("{:?}", f64::INFINITY.partial_cmp(&0.5));
+    println!("{:?}", 0.5.partial_cmp(&f64::INFINITY));
 }

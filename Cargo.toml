@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 axum = "0.8.1"
+geo = "0.29.3"
 osmpbf = "0.3.4"
 rstar = "0.12.2"
 serde = { version = "1.0.217", features = ["derive"] }
