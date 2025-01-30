@@ -6,12 +6,12 @@ use rstar::{primitives::GeomWithData, RTree};
 use crate::graph::{self, Edge, Graph, LatLon, Node, NodeID};
 
 #[derive(Debug)]
-enum ParseError {
+pub enum ParseError {
     OSMPBFError(osmpbf::Error) 
 }
 
-type NodeLocation = GeomWithData<[f64; 2], NodeID>;
-fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseError> {
+pub type NodeLocation = GeomWithData<[f64; 2], NodeID>;
+pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseError> {
     let mut nodes = HashMap::new();
     let mut adj_edges: HashMap<NodeID, Vec<Edge>> = HashMap::new();
     let ways: HashMap<i64, Vec<i64>> = HashMap::new(); 
@@ -107,7 +107,7 @@ fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseError> 
     }).map_err(|e| ParseError::OSMPBFError(e))?;
 
     let tree =  RTree::bulk_load(node_locations);
-    let graph = Graph::new(adj_edges);
+    let graph = Graph::new(adj_edges, nodes);
     Ok((graph, tree))
 }
 
@@ -147,6 +147,11 @@ mod tests {
         let target_node = tree.nearest_neighbor(&target_location).unwrap();
         println!("Start ID: {:?}", start_node.data);
         println!("Target ID: {:?}", target_node.data);
+
+        let start_node_edges = graph.adjacent_edges(start_node.data).unwrap();
+        for edge in start_node_edges {
+            println!("To Node {}", edge.to_node.0)
+        }
 
         let (dist, path) = shortest_path(&graph, start_node.data, target_node.data).unwrap();
         println!("Distance: {}", dist);

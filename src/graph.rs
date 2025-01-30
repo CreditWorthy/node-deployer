@@ -1,5 +1,5 @@
 use core::f64;
-use std::{cmp::Reverse, collections::{BinaryHeap, HashMap}};
+use std::{cmp::Reverse, collections::{BinaryHeap, HashMap}, hash::Hash};
 use rstar::Point;
 use serde::{Deserialize, Serialize};
 
@@ -61,14 +61,16 @@ struct X(i64, u8, String);
 #[derive(Hash, Eq, PartialEq, PartialOrd, Debug, Clone, Copy)]
 pub struct NodeID(pub i64); 
 pub struct Graph {
-    adj_edges: HashMap<NodeID, Vec<Edge>> 
+    adj_edges: HashMap<NodeID, Vec<Edge>>,
+    nodes: HashMap<NodeID, Node>
 }
 
 impl Graph {
     // constructor function
-    pub fn new(adj_edges: HashMap<NodeID, Vec<Edge>>) -> Self {
+    pub fn new(adj_edges: HashMap<NodeID, Vec<Edge>>, nodes: HashMap<NodeID, Node>) -> Self {
         Graph {
-            adj_edges 
+            adj_edges,
+            nodes
         }
     } 
 }
@@ -79,6 +81,16 @@ impl Graph {
     }
     pub fn adjacent_edges(&self, nodeId : NodeID) -> Option<&Vec<Edge>> /* Option<&[Edge]> */ { // zero length
         self.adj_edges.get(&nodeId)
+    }
+    pub fn get_latlon(&self, nodeId : NodeID) -> Option<LatLon> {
+        self.nodes.get(&nodeId).map(|n| n.location)
+
+        // match self.nodes.get(&nodeId) {
+        //     Some (x ) => {
+        //         Some(x.location)
+        //     }
+        //     None => {None}
+        // }
     }
 }
 
@@ -100,6 +112,28 @@ pub struct Edge {
     pub distance: f64,
 }
 
+#[derive(Debug, PartialEq)]
+struct PQItem {
+    id: NodeID,
+    distance: f64,
+}
+
+impl Ord for PQItem {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // will return none if comparing f64::Nan with some other f64
+        // self.distance.partial_cmp(&other.distance).unwrap() if self > other return Some(Greater)
+        other.distance.partial_cmp(&self.distance).unwrap() // unwrap() panic on the None
+    }
+}
+
+impl PartialOrd for PQItem {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        other.distance.partial_cmp(&self.distance)
+    }
+}
+
+impl Eq for PQItem {}
+
 pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>), ()> {
     // find out all shortest path to all nodes
     
@@ -108,27 +142,11 @@ pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>
     // prev: node id v -> previous node id w, through which we can reach to v, has the shortest distance. 
     //       used to recover the path detail (all nodes passed on shortest path)
 
-    #[derive(PartialEq, PartialOrd)]
-    struct PQItem {
-        id: NodeID,
-        distance: f64,
-    }
-
     // PartialOrd trait: f64 indeed implemented
     // f64::Nan
 
-    impl Ord for PQItem {
-        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-            // will return none if comparing f64::Nan with some other f64
-            // self.distance.partial_cmp(&other.distance).unwrap() if self > other return Some(Greater)
-            other.distance.partial_cmp(&self.distance).unwrap() // unwrap() panic on the None
-        }
-    }
-
-    impl Eq for PQItem {}
-
     let mut dist:HashMap<NodeID, f64> = HashMap::new();
-    let mut prev:HashMap<NodeID, Option<NodeID>> = HashMap::new();
+    let mut prev:HashMap<NodeID, NodeID> = HashMap::new();
 
     // priority queue: allows us to query the node with the "tentative" shortest distance (fast)
     // pq . find_smallest() -> related node/item which has the smallest value.
@@ -157,7 +175,7 @@ pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>
 
     for &node in g.for_each_node() {
         // dist.insert(node, f64::INFINITY); // or just leave it alone. because if some node not exist in dist, it means infinite
-        prev.insert(node, None);
+        // prev.insert(node, None);
         pq.push(PQItem{id: node, distance: f64::INFINITY });
     }
     dist.insert(s, 0.0);
@@ -174,11 +192,15 @@ pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>
         if u == t {
             println!("=== target found: build path");
             let mut path = Vec::new();
-            let mut current = Some(t);
-            while let Some(node) = current { // loop until None (the last node (start node) has no prev node )
-                path.push(node);
-                current = prev[&node];
+            let mut current = t;
+
+            // prev: t -> v -> u -> v 
+            while current != s { // loop until None (the last node (start node) has no prev node )
+                path.push(current);
+                current = prev[&current];
             }
+
+            path.push(s);
             path.reverse();
 
             // dist[t]
@@ -208,7 +230,7 @@ pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>
                    // compare distances of that other path (not through `u`) and current path to `v` through `u`.
                     if dist_to_v_through_u < dist[&v] {
                         dist.insert(v, dist_to_v_through_u);
-                        prev.insert(v, Some(u));
+                        prev.insert(v, u);
                         pq.push(PQItem{ distance: dist_to_v_through_u, id: edge.to_node });
                     } else {
                         // do nothing here. no need to update with a worse path.
@@ -216,7 +238,7 @@ pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>
                 } else {
                     // no existing path to `v` found yet.
                     dist.insert(v, dist_to_v_through_u);
-                    prev.insert(v, Some(u));
+                    prev.insert(v, u);
                     pq.push(PQItem{ distance: dist_to_v_through_u, id: edge.to_node });
                 }
             }
@@ -246,4 +268,27 @@ pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>
 fn test_f64() {
     println!("{:?}", f64::INFINITY.partial_cmp(&0.5));
     println!("{:?}", 0.5.partial_cmp(&f64::INFINITY));
+}
+
+#[test]
+fn test_pq() {
+    let mut pg : BinaryHeap<PQItem> = BinaryHeap::new();
+    pg.push(PQItem{
+        id: NodeID(1),
+        distance: 1.0
+    });
+
+    pg.push(PQItem{
+        id: NodeID(2),
+        distance: 5.0
+    });
+
+    pg.push(PQItem{
+        id: NodeID(3),
+        distance: 2.0
+    });
+
+    println!("{:?}", pg.pop());
+    println!("{:?}", pg.pop());
+    println!("{:?}", pg.pop());
 }
