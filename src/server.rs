@@ -81,8 +81,8 @@ fn test_rc() {
 
 }
 
-pub async fn server_start(address : &str) {
-    let (graph, tree) = parse_map("./data/delaware-latest.osm.pbf").unwrap();
+pub async fn server_start(address : &str, map_path: &str) {
+    let (graph, tree) = parse_map(map_path).unwrap();
 
     let shared_state = Arc::new(AppState{
         graph,
@@ -92,6 +92,11 @@ pub async fn server_start(address : &str) {
     let app = Router::new()
         .route("/health_check", get(health_check))
         .route("/nav", get(nav))
+        // put web/index.html in the same dir of our final binary
+        // in docker:
+        //    /app (dir)
+        //    /app/simple-nav (binary)
+        //    /app/web/index.html (static web page)
         .nest_service("/static", ServeDir::new("web").not_found_service(ServeFile::new("web/index.html")))
         .with_state(shared_state);
 
@@ -225,8 +230,6 @@ async fn nav(Query(req): Query<NavParameters>, app_state:State<Arc<AppState>>) -
         error_message: "destination format error".to_string(),
         code: 111,
     })?;
-
-
 
     let start_node = app_state.spaital_index.nearest_neighbor(&[origin.lon, origin.lat]).unwrap();
     let target_node = app_state.spaital_index.nearest_neighbor(&[destination.lon, destination.lat]).unwrap();
