@@ -1,14 +1,34 @@
-use std::{collections::HashMap, fmt::Debug, ptr::read};
+use std::{collections::HashMap, error::{self, Error}, fmt::Debug, io::Error, ptr::read};
 
 use geo::{Distance, Haversine, Point};
 use osmpbf::{Element, ElementReader};
 use rstar::{primitives::GeomWithData, RTree};
 use crate::graph::{self, Edge, Graph, LatLon, Node, NodeID};
 
+pub struct HighlevelError;
+
+
 #[derive(Debug)]
 pub enum ParseError {
+    Simple,
     OSMPBFError(osmpbf::Error) 
 }
+
+// correct usage for From
+// when you do this, the compiler will convert ParseError to HighlevelError automatically in ? context.
+// impl From<ParseError> for HighlevelError {
+//     fn from(value: ParseError) -> Self {
+//         HighlevelError
+//     }
+// }
+
+// fn auto() -> Result<(), HighlevelError> {
+//     let e = Err(ParseError::Simple)?;
+//    Ok(())
+// }
+
+
+pub type SpaitialIndex = RTree<NodeLocation>;
 
 pub type NodeLocation = GeomWithData<[f64; 2], NodeID>;
 pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseError> {

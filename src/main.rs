@@ -1,6 +1,7 @@
 mod server;
 mod parser;
 mod graph;
+mod engine;
 
 // tokio::main expects main() returns nothing -> ()
 #[tokio::main]
