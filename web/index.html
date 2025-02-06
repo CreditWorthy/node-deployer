@@ -28,7 +28,7 @@
                 L.polyline(markers).addTo(map)
             }
 
-            fetch("http://localhost:3000/nav?orig=38.692588,-75.382757&dest=38.696308,-75.384656", {
+            fetch("/nav?orig=38.692588,-75.382757&dest=38.696308,-75.384656", {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
