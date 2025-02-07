@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use crate::{graph::Graph, parser::{parse_map, SpaitialIndex}};
+use crate::{graph::{shortest_path, Graph, LatLon, NodeID}, parser::{parse_map, NodeLocation, SpaitialIndex}};
 
 
 struct Engine {
@@ -14,29 +14,74 @@ struct Engine {
 // use "dyn Error": any type implemented Error trait.
 // So if it's any type, then we don't know its size.
 
-#[derive(Debug)]
-struct E1; // zero-sized type
-impl std::fmt::Display for E1 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+// trait object (term): dynamic dispatch
+
+// static dispatch (generic + trait)
+// 1 function for 1 conrecte type T
+// adv: perf better
+// downside: binary size
+fn test_static<T>(t:T) where T:Trait1 {
+    t.method1();
+}
+
+// dynamic dipatch
+// only 1 function for all type T: Trait1
+// perf worse: virtual table 
+
+// &dyn Trait1: special pointer/referece (fat pointer) (contains metadata about the Type: virtual table: find the concrete function impl)
+// diff from: &String/ &Custom: simple pointer / unsize
+fn test_dyn(t: &dyn Trait1)  {
+    t.method1();
+}
+
+trait Trait1 {
+    fn method1(&self);
+}
+
+impl Trait1 for String {
+    fn method1(&self) {
+        ///////////
         todo!()
     }
 }
 
-#[derive(Debug)]
-struct E2(u16); // 2 bytes type
-impl std::fmt::Display for E2 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Trait1 for u8 {
+    fn method1(&self) {
+        /// xxxxx
         todo!()
     }
 }
 
-// implemented Error for both E1 and E2
-impl Error for E1 {
-
+// monomorphization: how to implement generic.
+// diff languages choose diff strategy:
+// java: type erasure. Object
+// rust: monomorphization, generate a specific function instance for each different concrete type.
+fn test_x() {
+    test_static(String::from("helo")); // test_static_String
+    test_static(1u8); // test_static_u8
 }
 
-impl Error for E2 {
+pub struct RouteResult {
+    total_distance: f64,
+    route_path: Vec<LatLon>,
+}
 
+// naming is hard: it's an abstraction of things
+#[derive(Debug)]
+pub enum EngineErrors {
+    CantFindNearestNode,
+    CantFindRoute,
+    CantFindLatLon,
+}
+
+impl std::fmt::Display for EngineErrors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("engine error: {:?}", self))
+    }
+}
+
+impl std::error::Error for EngineErrors {
+    
 }
 
 impl Engine {
@@ -44,6 +89,9 @@ impl Engine {
     // function call at run-time will create a call stack: a() -> b() 
     // Box: smart pointer, an owned pointer (it owns the content it's pointing to), fixed size
     // &str: a reference / pointer, doen't own the string content.
+
+    // Box<dyn Error> == &dyn Error : pointer
+    // Box<dyn Error> (fixed size like String) != dyn Error (unkown size/unsized type)
     pub fn build(osmfile: &str) -> Result<Engine, Box<dyn Error>> {
         // ? report error, two methods to fix:
         // 1. implement Error for ParseError
@@ -58,4 +106,43 @@ impl Engine {
             graph
         })
     } 
+
+    pub fn routing(&self, origin : LatLon, destination : LatLon) -> Result<RouteResult, Box<dyn Error>> {
+        // let a: Option<&NodeLocation> = self.spaitial_index.nearest_neighbor(&[origin.lon, origin.lat]);
+        // let b: Result<_, &str> = a.ok_or("error ...");
+        // let c: &NodeLocation = b?;
+
+
+        let start_node = self.spaitial_index.nearest_neighbor(&[origin.lon, origin.lat]).ok_or(EngineErrors::CantFindNearestNode)?;
+        let target_node = self.spaitial_index.nearest_neighbor(&[destination.lon, destination.lat]).ok_or(EngineErrors::CantFindNearestNode)?;
+        let (dist, path) = shortest_path(&self.graph, start_node.data, target_node.data).map_err(|_| EngineErrors::CantFindRoute)?;
+     
+        // that closure function will be executed for each iteration.
+        // we want some short-circuit effect like before (for loop)
+        // let mut navpath = vec![];
+        // for n in path {
+        //     let loc = self.graph.get_latlon(n).ok_or(EngineErrors::CantFindLatLon)?; // return early
+        //     navpath.push(loc);
+        // }
+
+        // on longer early-return
+        // rust provide magic
+        // Vec<Result<LatLon, EngineErrors>> -> Result<Vec<LatLon>, EngineErrors> return early
+        let navpath: Result<Vec<LatLon>, EngineErrors> = path.iter().map(|nodeId| { // new function context
+            // return or ? only exit that closure instead of the outer function.
+            self.graph.get_latlon(*nodeId).ok_or(EngineErrors::CantFindLatLon) // no longer use ? to return (outer function) early
+        }).collect();
+
+        // for nodeId in path {
+        //     let latlon = self.graph.get_latlon(nodeId).ok_or(EngineErrors::CantFindLatLon)?;
+        //     navpath.push(latlon);
+        // }
+
+        
+
+        Ok(RouteResult{
+            total_distance: dist,
+            route_path: navpath?
+        })
+    }
 }

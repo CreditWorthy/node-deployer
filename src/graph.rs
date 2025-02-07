@@ -3,6 +3,8 @@ use std::{cmp::Reverse, collections::{BinaryHeap, HashMap}, hash::Hash};
 use rstar::Point;
 use serde::{Deserialize, Serialize};
 
+use crate::engine::EngineErrors;
+
 // depth-first search
 // breadth-first search
 // shortest-path algorithm: Dijkstra (given two node s = start/source, t = target, shortest: summation of all weights on edges along the path, find the smallest one)
@@ -134,7 +136,11 @@ impl PartialOrd for PQItem {
 
 impl Eq for PQItem {}
 
-pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>), ()> {
+
+pub struct NoRouteFound; // equivalent to ()
+
+// () just means "no route found". Of course, a better method is to define a specifc type for this.
+pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>), NoRouteFound> {
     // find out all shortest path to all nodes
     
     // tentative 
@@ -260,7 +266,7 @@ pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>
     
 
 
-    Err(())
+    Err(NoRouteFound)
     // in each step: find the shortest path to some node.
 }
 

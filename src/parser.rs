@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::{self, Error}, fmt::Debug, io::Error, ptr::read};
+use std::{collections::HashMap, error::{self, Error}, fmt::Debug, ptr::read};
 
 use geo::{Distance, Haversine, Point};
 use osmpbf::{Element, ElementReader};
@@ -16,27 +16,78 @@ pub enum ParseError {
 
 // correct usage for From
 // when you do this, the compiler will convert ParseError to HighlevelError automatically in ? context.
-// impl From<ParseError> for HighlevelError {
-//     fn from(value: ParseError) -> Self {
-//         HighlevelError
-//     }
-// }
+impl From<ParseError> for HighlevelError {
+    fn from(value: ParseError) -> Self {
+        HighlevelError
+    }
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParseError::Simple => f.write_str("some simple error"),
+            ParseError::OSMPBFError(e) => f.write_str(&format!("underlying osmbpf error: {}", e)),
+        }
+    }
+}
+
+impl std::error::Error for ParseError {
+
+}
+
+impl From<osmpbf::Error> for ParseError {
+    fn from(value: osmpbf::Error) -> Self {
+        ParseError::OSMPBFError(value)
+    }
+}
 
 // fn auto() -> Result<(), HighlevelError> {
 //     let e = Err(ParseError::Simple)?;
 //    Ok(())
 // }
 
+// engineering consideration: forward / backward compatiblity
+// orphan rule: prevent the following impl
+// impl From<&str> for NodeLocation {
+//     fn from(value: &str) -> Self {
+//         todo!()
+//     }
+// }
+
+// impl From<&str> for NodeLocation2 {
+//     fn from(value: &str) -> Self {
+//         todo!()
+//     }
+// }
 
 pub type SpaitialIndex = RTree<NodeLocation>;
 
+// external type
 pub type NodeLocation = GeomWithData<[f64; 2], NodeID>;
+
+// our defined type
+// newtype pattern
+pub struct NodeLocation2(GeomWithData<[f64; 2], NodeID>);
+
 pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseError> {
     let mut nodes = HashMap::new();
     let mut adj_edges: HashMap<NodeID, Vec<Edge>> = HashMap::new();
     let ways: HashMap<i64, Vec<i64>> = HashMap::new(); 
     let mut node_locations = Vec::new();
     let mut node_count = 0;
+
+    // test From:
+    let s = String::from("hello");
+
+    // let v = vec![String::from("hello"), String::from("world")];
+    // let v:Vec<NodeLocation2> = vec!["hello".into(), "world".into()];
+
+    // impl From<&str> for String : from and into is reflexive
+    // impl Into<String> for &str
+    // impl Into<Custom> fro &str
+
+
+    let x: String = "hello".into();
 
     // 2 pass of pbf parse
     // 1st pass is to collect all locations of nodes
@@ -70,7 +121,7 @@ pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseErr
 
             }
         }
-    }).map_err(|e| ParseError::OSMPBFError(e))?;
+    })?;
 
     let reader2 = ElementReader::from_path(map_file).unwrap();
     reader2.for_each(|element| {
