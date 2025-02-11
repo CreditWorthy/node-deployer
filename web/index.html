@@ -15,7 +15,7 @@
     <body>
         <div id="map"></div>
         <script>
-            var map = L.map('map').setView([38.692588,-75.382757], 13);
+            var map = L.map('map').setView([38.537473,-75.057298], 13);
 
             L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
@@ -28,7 +28,7 @@
                 L.polyline(markers).addTo(map)
             }
 
-            fetch("/nav?orig=38.692588,-75.382757&dest=38.696308,-75.384656", {
+            fetch("/nav?orig=38.537473,-75.057298&dest=38.530513,-75.164037", {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',

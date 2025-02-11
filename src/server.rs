@@ -12,11 +12,10 @@ use rstar::{RTree};
 use serde::{Deserialize, Serialize};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::{graph::{shortest_path, Graph, LatLon}, parser::{parse_map, NodeLocation}};
+use crate::{engine::Engine, graph::{shortest_path, Graph, LatLon}, parser::{parse_map, NodeLocation}};
 
 struct AppState {
-    graph : Graph,
-    spaital_index: RTree<NodeLocation>
+    engine : Engine,
 }
 
 #[test]
@@ -82,11 +81,9 @@ fn test_rc() {
 }
 
 pub async fn server_start(address : &str, map_path: &str) {
-    let (graph, tree) = parse_map(map_path).unwrap();
-
+    let engine = Engine::build(map_path).unwrap();
     let shared_state = Arc::new(AppState{
-        graph,
-        spaital_index: tree
+        engine
     });
 
     let app = Router::new()
@@ -231,20 +228,12 @@ async fn nav(Query(req): Query<NavParameters>, app_state:State<Arc<AppState>>) -
         code: 111,
     })?;
 
-    let start_node = app_state.spaital_index.nearest_neighbor(&[origin.lon, origin.lat]).unwrap();
-    let target_node = app_state.spaital_index.nearest_neighbor(&[destination.lon, destination.lat]).unwrap();
-    let (dist, path) = shortest_path(&app_state.graph, start_node.data, target_node.data).unwrap();
 
-    let mut navpath: Vec<LatLon> = vec![];
-
-    for nodeId in path {
-        let latlon = app_state.graph.get_latlon(nodeId).unwrap();
-        navpath.push(latlon);
-    }
-
+    let result = app_state.engine.routing(origin, destination).unwrap();
+    
     Ok(NavResponse {
-        distance: dist,
+        distance: result.total_distance,
         duration: 0.0,
-        path: navpath,
+        path: result.route_path,
     })
 }

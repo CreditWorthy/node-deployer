@@ -107,10 +107,10 @@ pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseErr
                     }
                 };
 
-                node_count+=1;
-                if node_count % 100000==0 {
-                    println!("== sample node: {} {}", node.lon(), node.lat());
-                }
+                // node_count+=1;
+                // if node_count % 100000==0 {
+                //     println!("== sample node: {} {}", node.lon(), node.lat());
+                // }
 
                 node_locations.push(NodeLocation::new( [ node.lon(), node.lat() ], NodeID(node.id()) ));
 
@@ -123,10 +123,23 @@ pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseErr
         }
     })?;
 
+    let mut all_way_count = 0;
+    let mut highway_count = 0;
+
     let reader2 = ElementReader::from_path(map_file).unwrap();
     reader2.for_each(|element| {
         match element {
             Element::Way( way ) => {
+                all_way_count+=1;
+                // quality of osm map data is not very high. sometime, because road properties (wrong tags) will cause the map divied into muliple parts.
+                
+                // filter out all ways without "highway" tag
+                if way.tags().find(|(k, _)| *k != "highway").is_none() {
+                    return; // skip this way
+                }
+
+                highway_count+=1;
+
                 let all_way_nodes:Vec<_> = way.refs().map(|node_id| NodeID(node_id)).collect();
                 for curr in 0..all_way_nodes.len() - 1 {
                     let next = curr+1;
@@ -176,6 +189,8 @@ pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseErr
             }
         }
     }).map_err(|e| ParseError::OSMPBFError(e))?;
+
+    println!("all ways: {}, highway: {}", all_way_count, highway_count);
 
     let tree =  RTree::bulk_load(node_locations);
     let graph = Graph::new(adj_edges, nodes);

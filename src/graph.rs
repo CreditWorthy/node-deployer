@@ -137,6 +137,7 @@ impl PartialOrd for PQItem {
 impl Eq for PQItem {}
 
 
+#[derive(Debug)]
 pub struct NoRouteFound; // equivalent to ()
 
 // () just means "no route found". Of course, a better method is to define a specifc type for this.
@@ -208,6 +209,8 @@ pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>
 
             path.push(s);
             path.reverse();
+
+            println!("=== path build finish");
 
             // dist[t]
             return Ok(( item.distance, path )) 

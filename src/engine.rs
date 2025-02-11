@@ -3,7 +3,7 @@ use std::error::Error;
 use crate::{graph::{shortest_path, Graph, LatLon, NodeID}, parser::{parse_map, NodeLocation, SpaitialIndex}};
 
 
-struct Engine {
+pub struct Engine {
     spaitial_index: SpaitialIndex,
     graph: Graph,
 }
@@ -62,8 +62,8 @@ fn test_x() {
 }
 
 pub struct RouteResult {
-    total_distance: f64,
-    route_path: Vec<LatLon>,
+    pub total_distance: f64,
+    pub route_path: Vec<LatLon>,
 }
 
 // naming is hard: it's an abstraction of things
@@ -112,6 +112,8 @@ impl Engine {
         // let b: Result<_, &str> = a.ok_or("error ...");
         // let c: &NodeLocation = b?;
 
+        
+
 
         let start_node = self.spaitial_index.nearest_neighbor(&[origin.lon, origin.lat]).ok_or(EngineErrors::CantFindNearestNode)?;
         let target_node = self.spaitial_index.nearest_neighbor(&[destination.lon, destination.lat]).ok_or(EngineErrors::CantFindNearestNode)?;
@@ -127,22 +129,20 @@ impl Engine {
 
         // on longer early-return
         // rust provide magic
-        // Vec<Result<LatLon, EngineErrors>> -> Result<Vec<LatLon>, EngineErrors> return early
-        let navpath: Result<Vec<LatLon>, EngineErrors> = path.iter().map(|nodeId| { // new function context
+        // Vec<Result<LatLon, EngineErrors>> no early-return -> Result<Vec<LatLon>, EngineErrors> return early
+        let navpath = path.iter().map(|nodeId| { // new function context
             // return or ? only exit that closure instead of the outer function.
             self.graph.get_latlon(*nodeId).ok_or(EngineErrors::CantFindLatLon) // no longer use ? to return (outer function) early
-        }).collect();
+        }).collect::< Result<Vec<LatLon>, EngineErrors> >()?; // turbofish ::<>
 
         // for nodeId in path {
         //     let latlon = self.graph.get_latlon(nodeId).ok_or(EngineErrors::CantFindLatLon)?;
         //     navpath.push(latlon);
         // }
 
-        
-
         Ok(RouteResult{
             total_distance: dist,
-            route_path: navpath?
+            route_path: navpath
         })
     }
 }

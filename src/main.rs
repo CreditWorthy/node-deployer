@@ -1,7 +1,4 @@
-mod server;
-mod parser;
-mod graph;
-mod engine;
+use simple_nav::server;
 
 // tokio::main expects main() returns nothing -> ()
 #[tokio::main]

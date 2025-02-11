@@ -3,6 +3,13 @@ name = "simple-nav"
 version = "0.1.0"
 edition = "2021"
 
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "my_benchmark"
+harness = false
+
 [dependencies]
 axum = "0.8.1"
 geo = "0.29.3"
