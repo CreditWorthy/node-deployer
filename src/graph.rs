@@ -180,16 +180,16 @@ pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>
     // 17                  prev[v] ← u
     // 18
 
-    for &node in g.for_each_node() {
-        // dist.insert(node, f64::INFINITY); // or just leave it alone. because if some node not exist in dist, it means infinite
-        // prev.insert(node, None);
-        pq.push(PQItem{id: node, distance: f64::INFINITY });
-    }
+    // for &node in g.for_each_node() {
+    //     // dist.insert(node, f64::INFINITY); // or just leave it alone. because if some node not exist in dist, it means infinite
+    //     // prev.insert(node, None);
+    //     pq.push(PQItem{id: node, distance: f64::INFINITY }); // fill with all nodes!
+    // }
     dist.insert(s, 0.0);
     pq.push(PQItem { id: s, distance: 0.0 });
 
     let mut count = 0;
-    while let Some(item) = pq.pop() {
+    while let Some(item) = pq.pop() { //
         count+=1;
         if count % 10000 ==0 {
             println!("visited {} nodes", count);
@@ -197,7 +197,7 @@ pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>
 
         let u = item.id;
         if u == t {
-            println!("=== target found: build path");
+            // println!("=== target found: build path");
             let mut path = Vec::new();
             let mut current = t;
 
@@ -210,7 +210,7 @@ pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>
             path.push(s);
             path.reverse();
 
-            println!("=== path build finish");
+            // println!("=== path build finish");
 
             // dist[t]
             return Ok(( item.distance, path )) 

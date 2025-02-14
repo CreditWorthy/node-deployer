@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::{self, Error}, fmt::Debug, ptr::read};
+use std::{collections::{HashMap, HashSet}, error::{self, Error}, fmt::Debug, ptr::read};
 
 use geo::{Distance, Haversine, Point};
 use osmpbf::{Element, ElementReader};
@@ -70,10 +70,9 @@ pub type NodeLocation = GeomWithData<[f64; 2], NodeID>;
 pub struct NodeLocation2(GeomWithData<[f64; 2], NodeID>);
 
 pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseError> {
-    let mut nodes = HashMap::new();
+    let mut all_nodes: HashMap<NodeID, Node> = HashMap::new();
     let mut adj_edges: HashMap<NodeID, Vec<Edge>> = HashMap::new();
     let ways: HashMap<i64, Vec<i64>> = HashMap::new(); 
-    let mut node_locations = Vec::new();
     let mut node_count = 0;
 
     // test From:
@@ -112,9 +111,9 @@ pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseErr
                 //     println!("== sample node: {} {}", node.lon(), node.lat());
                 // }
 
-                node_locations.push(NodeLocation::new( [ node.lon(), node.lat() ], NodeID(node.id()) ));
+                // All nodes !
 
-                nodes.insert(node_object.id, node_object);
+                all_nodes.insert(node_object.id, node_object);
             },
 
             _ => {
@@ -125,6 +124,7 @@ pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseErr
 
     let mut all_way_count = 0;
     let mut highway_count = 0;
+    let mut used_nodes = HashSet::new(); // only care about node id
 
     let reader2 = ElementReader::from_path(map_file).unwrap();
     reader2.for_each(|element| {
@@ -134,9 +134,12 @@ pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseErr
                 // quality of osm map data is not very high. sometime, because road properties (wrong tags) will cause the map divied into muliple parts.
                 
                 // filter out all ways without "highway" tag
-                if way.tags().find(|(k, _)| *k != "highway").is_none() {
+                if way.tags().find(|(k, _)| *k == "highway").is_none() {
                     return; // skip this way
                 }
+
+                
+
 
                 highway_count+=1;
 
@@ -146,8 +149,28 @@ pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseErr
                     let curr_node_id = all_way_nodes[curr];
                     let next_node_id = all_way_nodes[next];
 
-                    let from_location = nodes.get(&curr_node_id).unwrap();
-                    let to_location = nodes.get(&next_node_id).unwrap();
+                    // skip way which refers missing node
+                    // let from_location  = match all_nodes.get(&curr_node_id) {
+                    //     Some(from_location) => {from_location},
+                    //     None => {return}  // skip current way
+                    // };
+                    // let to_location = match all_nodes.get(&next_node_id) {
+                    //     Some(to_location) => {to_location},
+                    //     None => {return}  // skip current way
+                    // };
+
+                    // Some(_), Some(_)
+                    // Some(_), None
+                    // None, Some(_)
+                    // None, None,
+
+                    let (from_location, to_location) = match (all_nodes.get(&curr_node_id) , all_nodes.get(&next_node_id)) {
+                        (Some(from), Some(to)) => (from, to),
+                        _ => return 
+                    };
+
+                    // let from_location = all_nodes.get(&curr_node_id).unwrap(); // risk!
+                    // let to_location = all_nodes.get(&next_node_id).unwrap(); // 
 
 
                     let from_point = Point::new(from_location.location.lon, from_location.location.lat);
@@ -182,6 +205,10 @@ pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseErr
                         .push(reverse_edge);
                 }
 
+                for n in way.refs() {
+                    used_nodes.insert(NodeID(n));
+                }
+
             }
 
             _ => {
@@ -192,8 +219,21 @@ pub fn parse_map(map_file:&str) -> Result<(Graph, RTree<NodeLocation>), ParseErr
 
     println!("all ways: {}, highway: {}", all_way_count, highway_count);
 
+    let node_locations = used_nodes.into_iter().map(|nodeId| {
+        let node = all_nodes.get(&nodeId).unwrap(); // safe!
+        NodeLocation::new([node.location.lon, node.location.lat], nodeId)
+    }).collect();
+
+    // temp build a all node rtree to see the bug fix in shortest_path
+    // let node_locations = all_nodes.iter().map(|(&nodeid, node)| {
+    //     NodeLocation::new([node.location.lon, node.location.lat], nodeid)
+    // }).collect();
+
+    // node_locations.push(NodeLocation::new( [ node.lon(), node.lat() ], NodeID(node.id()) ));
+
+
     let tree =  RTree::bulk_load(node_locations);
-    let graph = Graph::new(adj_edges, nodes);
+    let graph = Graph::new(adj_edges, all_nodes);
     Ok((graph, tree))
 }
 

@@ -64,6 +64,7 @@ fn test_x() {
 pub struct RouteResult {
     pub total_distance: f64,
     pub route_path: Vec<LatLon>,
+    pub nodes: Vec<NodeID>,
 }
 
 // naming is hard: it's an abstraction of things
@@ -117,8 +118,12 @@ impl Engine {
 
         let start_node = self.spaitial_index.nearest_neighbor(&[origin.lon, origin.lat]).ok_or(EngineErrors::CantFindNearestNode)?;
         let target_node = self.spaitial_index.nearest_neighbor(&[destination.lon, destination.lat]).ok_or(EngineErrors::CantFindNearestNode)?;
+
+        // println!("== start: {}, target: {}",start_node.data.0, target_node.data.0);
+
+
         let (dist, path) = shortest_path(&self.graph, start_node.data, target_node.data).map_err(|_| EngineErrors::CantFindRoute)?;
-     
+
         // that closure function will be executed for each iteration.
         // we want some short-circuit effect like before (for loop)
         // let mut navpath = vec![];
@@ -142,7 +147,8 @@ impl Engine {
 
         Ok(RouteResult{
             total_distance: dist,
-            route_path: navpath
+            route_path: navpath,
+            nodes: path,
         })
     }
 }

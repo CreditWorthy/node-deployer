@@ -13,11 +13,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     };
 
     let dest = LatLon{
-        lat : -75.164037,
-        lon : 38.530513,
+        lat : -75.124117,
+        lon : 38.731088,
     };
 
-    c.bench_function("fib 20", |b| b.iter(|| engine.routing(black_box(orig), black_box(dest))));
+    c.bench_function("fib 20", |b| b.iter(|| {let result = engine.routing(black_box(orig), black_box(dest)); result.unwrap(); }));
 }
 
 criterion_group!(benches, criterion_benchmark);
