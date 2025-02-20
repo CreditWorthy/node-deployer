@@ -140,64 +140,15 @@ impl Eq for PQItem {}
 #[derive(Debug)]
 pub struct NoRouteFound; // equivalent to ()
 
-// () just means "no route found". Of course, a better method is to define a specifc type for this.
 pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>), NoRouteFound> {
-    // find out all shortest path to all nodes
-    
-    // tentative 
-    // dist: node id v -> tentative shortest distance to v from start node s.
-    // prev: node id v -> previous node id w, through which we can reach to v, has the shortest distance. 
-    //       used to recover the path detail (all nodes passed on shortest path)
-
-    // PartialOrd trait: f64 indeed implemented
-    // f64::Nan
-
     let mut dist:HashMap<NodeID, f64> = HashMap::new();
     let mut prev:HashMap<NodeID, NodeID> = HashMap::new();
-
-    // priority queue: allows us to query the node with the "tentative" shortest distance (fast)
-    // pq . find_smallest() -> related node/item which has the smallest value.
     let mut pq:BinaryHeap<PQItem> = BinaryHeap::new();
-
-    // float number: Nan - not a number
-    // f64::NAN > 1.0; // compare it with other f64
-
-    // wikipedia version is to find shortest paths to all nodes.
-    // 3      for each vertex v in Graph.Vertices:
-    // 4          dist[v] ← INFINITY
-    // 5          prev[v] ← UNDEFINED
-    // 6          add v to Q
-    // 7      dist[source] ← 0
-
-    // 9      while Q is not empty:
-    // 10          u ← vertex in Q with minimum dist[u]
-    // 11          remove u from Q
-    // 12         
-    // 13          for each neighbor v of u still in Q:
-    // 14              alt ← dist[u] + Graph.Edges(u, v)
-    // 15              if alt < dist[v]:
-    // 16                  dist[v] ← alt
-    // 17                  prev[v] ← u
-    // 18
-
-    // for &node in g.for_each_node() {
-    //     // dist.insert(node, f64::INFINITY); // or just leave it alone. because if some node not exist in dist, it means infinite
-    //     // prev.insert(node, None);
-    //     pq.push(PQItem{id: node, distance: f64::INFINITY }); // fill with all nodes!
-    // }
     dist.insert(s, 0.0);
     pq.push(PQItem { id: s, distance: 0.0 });
-
-    let mut count = 0;
     while let Some(item) = pq.pop() { //
-        count+=1;
-        if count % 10000 ==0 {
-            println!("visited {} nodes", count);
-        }
-
         let u = item.id;
         if u == t {
-            // println!("=== target found: build path");
             let mut path = Vec::new();
             let mut current = t;
 

@@ -8,20 +8,26 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use rstar::{RTree};
+use rstar::RTree;
 use serde::{Deserialize, Serialize};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::{engine::Engine, graph::{shortest_path, Graph, LatLon}, parser::{parse_map, NodeLocation}};
+use crate::{
+    engine::Engine,
+    graph::{shortest_path, Graph, LatLon},
+    parser::{parse_map, NodeLocation},
+};
 
 struct AppState {
-    engine : Engine,
+    engine: Engine,
 }
 
 #[test]
 fn test_rc() {
-    struct S{a: f64};
-    
+    struct S {
+        a: f64,
+    };
+
     //  impl !Send for S {}
 
     // impl Drop for S {
@@ -40,7 +46,7 @@ fn test_rc() {
     //     // Box / String: owned pointer (in some sense)
 
     //     // Deref trait: smart pointer in rust
-    //     // deref(&self) -> &T: 
+    //     // deref(&self) -> &T:
     //     // mul_owned.a; // mul_owned.deref().a; automically by compiler
 
     //     // let x = Rc::clone(&mul_owned); // only clone pointer Rc
@@ -74,17 +80,13 @@ fn test_rc() {
     //     // Send & Sync.
     //     // Arc: it's safe version of Rc
     // }
-    
+
     println!("== s scope finish");
-
-
 }
 
-pub async fn server_start(address : &str, map_path: &str) {
+pub async fn server_start(address: &str, map_path: &str) {
     let engine = Engine::build(map_path).unwrap();
-    let shared_state = Arc::new(AppState{
-        engine
-    });
+    let shared_state = Arc::new(AppState { engine });
 
     let app = Router::new()
         .route("/health_check", get(health_check))
@@ -94,15 +96,15 @@ pub async fn server_start(address : &str, map_path: &str) {
         //    /app (dir)
         //    /app/simple-nav (binary)
         //    /app/web/index.html (static web page)
-        .nest_service("/static", ServeDir::new("web").not_found_service(ServeFile::new("web/index.html")))
+        .nest_service(
+            "/static",
+            ServeDir::new("web").not_found_service(ServeFile::new("web/index.html")),
+        )
         .with_state(shared_state);
 
-
-    // 1. ownership system: (RAII) manage memory/resources semi-auto (semi-gc). 
-    // 2. borrow & references: 
+    // 1. ownership system: (RAII) manage memory/resources semi-auto (semi-gc).
+    // 2. borrow & references:
     // 3. multiple ownership problem: (only semantic/conceptually) , rust used some special types : Rc / Arc
-
-    
 
     // reasoning like:
     // 1. use Mutex to protece shared data in multiple threads
@@ -131,9 +133,9 @@ pub async fn server_start(address : &str, map_path: &str) {
     // std::thread::spawn(move || {
     //     // so if you access some value inside a child thread, memory issue: resource realsed by main thread.
     //     // time sleep 1 hours, mutex_shared destroied/reclaimed because finish of main thread.
-    //     // dangling reference/memory 
+    //     // dangling reference/memory
 
-    //     // 'static constraints means closure either owns used variables/values or only refer/borrow some 'static variables/values 
+    //     // 'static constraints means closure either owns used variables/values or only refer/borrow some 'static variables/values
     //     let mut guard = mutex_shared.lock().unwrap();
     //     *guard = String::from("world");
     // });
@@ -143,37 +145,35 @@ pub async fn server_start(address : &str, map_path: &str) {
     // 1. multiple ownerships (conceptually, not syntax lly): e.g. share part of lists
     //     a -> b -> c
     //          ^
-    //     d -> e 
+    //     d -> e
     //  a and e both owns (b -> c) child list
     //  when releasing list start with `a`, you cannot just release (b -> c) child list.
     //   `Rc` for single thread, `Arc for multi-thread.
 
     //  Rc<Node>: b
     //  a.
-   
+
     //
 
     // Drop trait it's called by compiler when out of scope (RAII):
-    // (MutexGuard): it will release the corresponding lock automatically. 
+    // (MutexGuard): it will release the corresponding lock automatically.
 
     // u64, is Send.
     // lock is usually not safe to send. POSIX
-    // lock is not implemented Send trait 
+    // lock is not implemented Send trait
 
     // Send & Sync marker traits (auto trait)
     // Send: express if value of some type can be sent to another thread
     // Sync: express if reference of some type can be sent to another thread.
-    // by default compiler will derive these two traits for your defined types, 
+    // by default compiler will derive these two traits for your defined types,
     // if you want implements Send and Sync you need to use unsafe.
-
-
 
     let listener = tokio::net::TcpListener::bind(address).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 
 async fn health_check() -> &'static str {
-    return "Ok"; 
+    return "Ok";
 }
 
 #[derive(Debug, Deserialize)]
@@ -217,7 +217,10 @@ impl IntoResponse for ErrResponse {
 
 // Rust doesn't have reflect mechanism: runtime type inspection , GOlang's json::marshal() , e.g. mapping struct field name to json keys
 // extractor (axum): special trick.
-async fn nav(Query(req): Query<NavParameters>, app_state:State<Arc<AppState>>) -> Result<NavResponse, ErrResponse> {
+async fn nav(
+    Query(req): Query<NavParameters>,
+    app_state: State<Arc<AppState>>,
+) -> Result<NavResponse, ErrResponse> {
     let origin = LatLon::parse(&req.orig).map_err(|e| ErrResponse {
         error_message: "origin  format error".to_string(),
         code: 111,
@@ -228,9 +231,8 @@ async fn nav(Query(req): Query<NavParameters>, app_state:State<Arc<AppState>>) -
         code: 111,
     })?;
 
-
     let result = app_state.engine.routing(origin, destination).unwrap();
-    
+
     Ok(NavResponse {
         distance: result.total_distance,
         duration: 0.0,
