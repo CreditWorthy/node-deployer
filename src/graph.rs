@@ -1,9 +1,9 @@
 use core::f64;
-use std::{cmp::Reverse, collections::{BinaryHeap, HashMap}, hash::Hash};
+use std::{cmp::Reverse, collections::{BinaryHeap, HashMap}, f64::INFINITY, hash::Hash};
 use rstar::Point;
 use serde::{Deserialize, Serialize};
 
-use crate::engine::EngineErrors;
+use crate::{engine::EngineErrors, osm};
 
 // depth-first search
 // breadth-first search
@@ -59,20 +59,31 @@ impl LatLon {
 struct X(i64, u8, String);
 
 
-// newtype pattern in rust
-#[derive(Hash, Eq, PartialEq, PartialOrd, Debug, Clone, Copy)]
-pub struct NodeID(pub i64); 
+// newtype pattern in rus
 pub struct Graph {
     adj_edges: HashMap<NodeID, Vec<Edge>>,
-    nodes: HashMap<NodeID, Node>
+    // nodes: HashMap<NodeID, Node>,
+    nodes2: Vec<Node>,
+    node_id_map: HashMap<osm::NodeID, NodeID> // mapping: external osm nodeid -> internal graph node id (which is just index)
 }
 
 impl Graph {
     // constructor function
     pub fn new(adj_edges: HashMap<NodeID, Vec<Edge>>, nodes: HashMap<NodeID, Node>) -> Self {
+
+        let nodes2 = nodes.into_values().collect::<Vec<Node>>(); // turbo-fish
+        let mut node_id_map = HashMap::new();
+        let mut next_index = 0;
+        for n in &nodes2 {
+            node_id_map.insert(n.id, NodeID(next_index));
+            next_index+=1;
+        }
+
         Graph {
             adj_edges,
-            nodes
+            // nodes,
+            nodes2,
+            node_id_map,
         }
     } 
 }
@@ -84,8 +95,9 @@ impl Graph {
     pub fn adjacent_edges(&self, nodeId : NodeID) -> Option<&Vec<Edge>> /* Option<&[Edge]> */ { // zero length
         self.adj_edges.get(&nodeId)
     }
+    // distinguish external osm id vs internal index-based id.
     pub fn get_latlon(&self, nodeId : NodeID) -> Option<LatLon> {
-        self.nodes.get(&nodeId).map(|n| n.location)
+        Some(self.nodes2[nodeId.0].location) // or better change the return type to just LatLong intead of Option<LatLon>.
 
         // match self.nodes.get(&nodeId) {
         //     Some (x ) => {
@@ -94,14 +106,20 @@ impl Graph {
         //     None => {None}
         // }
     }
+
+    pub fn get_total_nodes(&self) -> usize {
+        return self.nodes2.len()
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Node {
-    pub id : NodeID,
+    pub id : osm::NodeID,
     pub location : LatLon
 }
 
+#[derive(Hash, Eq, PartialEq, PartialOrd, Debug, Clone, Copy)]
+pub struct NodeID(pub usize); 
 
 #[derive(Clone)]
 struct EdgeID(i64);
@@ -141,10 +159,13 @@ impl Eq for PQItem {}
 pub struct NoRouteFound; // equivalent to ()
 
 pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>), NoRouteFound> {
-    let mut dist:HashMap<NodeID, f64> = HashMap::new();
-    let mut prev:HashMap<NodeID, NodeID> = HashMap::new();
+    // let mut dist:HashMap<NodeID, f64> = HashMap::new();
+    // let mut prev:HashMap<NodeID, NodeID> = HashMap::new();
+    let mut dist = vec![f64::INFINITY; g.get_total_nodes()]; // indexed by internal `NodeID`
+    let mut prev = vec![Option::<NodeID>::None; g.get_total_nodes()];
+
     let mut pq:BinaryHeap<PQItem> = BinaryHeap::new();
-    dist.insert(s, 0.0);
+    dist.insert(s.0, 0.0);
     pq.push(PQItem { id: s, distance: 0.0 });
     while let Some(item) = pq.pop() { //
         let u = item.id;
@@ -155,7 +176,10 @@ pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>
             // prev: t -> v -> u -> v 
             while current != s { // loop until None (the last node (start node) has no prev node )
                 path.push(current);
-                current = prev[&current];
+                match prev[current.0] {
+                    Some(prev) => current = prev,
+                    None => panic!("bug happens: node {} does not have a previous node", current.0),
+                }
             }
 
             path.push(s);
@@ -184,21 +208,25 @@ pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>
 
                 // Two cases:
                 // 1. dist_to_v_through_u >. 
+                
 
-                if dist.contains_key(&v) {
+                if dist[v.0] < f64::INFINITY {
                     // indeed there is already some other path to `v` (not through `u`).
                    // compare distances of that other path (not through `u`) and current path to `v` through `u`.
-                    if dist_to_v_through_u < dist[&v] {
-                        dist.insert(v, dist_to_v_through_u);
-                        prev.insert(v, u);
+                    if dist_to_v_through_u < dist[v.0] {
+                        dist[v.0] = dist_to_v_through_u; 
+                        prev[v.0] = Option::Some(u);
+                        // dist.insert(v, dist_to_v_through_u);
+                        // prev.insert(v, u);
                         pq.push(PQItem{ distance: dist_to_v_through_u, id: edge.to_node });
                     } else {
                         // do nothing here. no need to update with a worse path.
                     }
                 } else {
                     // no existing path to `v` found yet.
-                    dist.insert(v, dist_to_v_through_u);
-                    prev.insert(v, u);
+                    dist[v.0] = dist_to_v_through_u; 
+                    prev[v.0] = Option::Some(u);
+
                     pq.push(PQItem{ distance: dist_to_v_through_u, id: edge.to_node });
                 }
             }
