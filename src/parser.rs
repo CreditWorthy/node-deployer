@@ -5,7 +5,7 @@ use std::{
     ptr::read,
 };
 
-use crate::graph::{self, Edge, Graph, LatLon, Node, NodeID};
+use crate::{graph::{Edge, Graph, LatLon, Node}, osm, spatialindex::{NodeLocation, SpatialIndex}};
 use geo::{Distance, Haversine, Point};
 use osmpbf::{Element, ElementReader};
 use rstar::{primitives::GeomWithData, RTree};
@@ -43,18 +43,16 @@ impl From<osmpbf::Error> for ParseError {
     }
 }
 
-pub type SpaitialIndex = RTree<NodeLocation>;
-
 // external type
-pub type NodeLocation = GeomWithData<[f64; 2], NodeID>;
+
 
 // our defined type
 // newtype pattern
-pub struct NodeLocation2(GeomWithData<[f64; 2], NodeID>);
+pub struct NodeLocation2(GeomWithData<[f64; 2], osm::NodeID>);
 
-pub fn parse_map(map_file: &str) -> Result<(Graph, RTree<NodeLocation>), ParseError> {
-    let mut all_nodes: HashMap<NodeID, Node> = HashMap::new();
-    let mut adj_edges: HashMap<NodeID, Vec<Edge>> = HashMap::new();
+pub fn parse_map(map_file: &str) -> Result<(Graph, SpatialIndex), ParseError> {
+    let mut all_nodes: HashMap<osm::NodeID, Node> = HashMap::new();
+    let mut adj_edges: HashMap<osm::NodeID, Vec<Edge>> = HashMap::new();
     let ways: HashMap<i64, Vec<i64>> = HashMap::new();
     let mut node_count = 0;
 
@@ -66,7 +64,7 @@ pub fn parse_map(map_file: &str) -> Result<(Graph, RTree<NodeLocation>), ParseEr
     reader.for_each(|element| match element {
         Element::DenseNode(node) => {
             let node_object = Node {
-                id: NodeID(node.id()),
+                id: osm::NodeID(node.id()),
                 location: LatLon {
                     lat: node.lat(),
                     lon: node.lon(),
@@ -81,7 +79,8 @@ pub fn parse_map(map_file: &str) -> Result<(Graph, RTree<NodeLocation>), ParseEr
 
     let mut all_way_count = 0;
     let mut highway_count = 0;
-    let mut used_nodes = HashSet::new(); // only care about node id
+    let mut used_node_ids = HashSet::new(); // only care about node id
+    let mut used_ways:Vec<osm::Way> = Vec::new();
 
     let reader2 = ElementReader::from_path(map_file).unwrap();
     reader2
@@ -98,7 +97,11 @@ pub fn parse_map(map_file: &str) -> Result<(Graph, RTree<NodeLocation>), ParseEr
 
                     highway_count += 1;
 
-                    let all_way_nodes: Vec<_> = way.refs().map(|node_id| NodeID(node_id)).collect();
+                    // a -> b -> c -> d
+                    //   d1   d2   d3
+                    let mut distances = Vec::new(); // distance for each concecuitive pair of nodes in this way
+
+                    let all_way_nodes: Vec<_> = way.refs().map(|node_id| osm::NodeID(node_id)).collect();
                     for curr in 0..all_way_nodes.len() - 1 {
                         let next = curr + 1;
                         let curr_node_id = all_way_nodes[curr];
@@ -119,36 +122,17 @@ pub fn parse_map(map_file: &str) -> Result<(Graph, RTree<NodeLocation>), ParseEr
                             Point::new(to_location.location.lon, from_location.location.lat);
                         let distance = Haversine::distance(from_point, to_point);
 
-                        // how to get location (latlon) for curr_node and next_node
-
-                        // locations.get_location_by_node_id(curr_node)
-
-                        let forward_edge = Edge {
-                            from_node: curr_node_id,
-                            to_node: next_node_id,
-                            distance,
-                        };
-
-                        let reverse_edge = Edge {
-                            from_node: next_node_id,
-                            to_node: curr_node_id,
-                            distance,
-                        };
-
-                        adj_edges
-                            .entry(curr_node_id)
-                            .or_insert_with(Vec::new)
-                            .push(forward_edge);
-
-                        adj_edges
-                            .entry(next_node_id)
-                            .or_insert_with(Vec::new)
-                            .push(reverse_edge);
+                        distances.push(distance);
                     }
 
                     for n in way.refs() {
-                        used_nodes.insert(NodeID(n));
+                        used_node_ids.insert(osm::NodeID (n));
                     }
+
+                    used_ways.push(osm::Way {
+                        nodes: way.refs().map(|n| osm::NodeID(n)).collect(),
+                        distances,
+                    });
                 }
 
                 _ => {}
@@ -158,16 +142,16 @@ pub fn parse_map(map_file: &str) -> Result<(Graph, RTree<NodeLocation>), ParseEr
 
     println!("all ways: {}, highway: {}", all_way_count, highway_count);
 
-    let node_locations = used_nodes
-        .into_iter()
-        .map(|nodeId| {
-            let node = all_nodes.get(&nodeId).unwrap(); // safe!
-            NodeLocation::new([node.location.lon, node.location.lat], nodeId)
-        })
-        .collect();
+    let used_nodes:HashMap<osm::NodeID, Node> = used_node_ids
+    .into_iter()
+    .map(|nodeId| {
+        let node = all_nodes.get(&nodeId).unwrap(); // safe!
+        (nodeId, node.clone()) // iteration step
+    })
+    .collect(); // generic
 
-    let tree = RTree::bulk_load(node_locations);
-    let graph = Graph::new(adj_edges, all_nodes);
+    let tree = SpatialIndex::build(&used_nodes);
+    let graph = Graph::build(used_nodes, used_ways);
     Ok((graph, tree))
 }
 
@@ -212,7 +196,7 @@ mod tests {
 
         let start_node_edges = graph.adjacent_edges(start_node.data).unwrap();
         for edge in start_node_edges {
-            println!("To Node {}", edge.to_node.0)
+            println!("To Node {}", edge.to_node.field1)
         }
 
         let (dist, path) = shortest_path(&graph, start_node.data, target_node.data).unwrap();

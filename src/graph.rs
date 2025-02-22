@@ -53,50 +53,84 @@ impl LatLon {
     }
 }
 
-//    |
-//  - . -
-
-struct X(i64, u8, String);
+// impl std::ops::IndexMut for NodeIndex {
+//     type Output = 
+//     fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
+//         todo!()
+//     }
+// }
 
 
 // newtype pattern in rus
 pub struct Graph {
-    adj_edges: HashMap<NodeID, Vec<Edge>>,
+    adj_edges: Vec<Vec<Edge>>,
     // nodes: HashMap<NodeID, Node>,
     nodes2: Vec<Node>,
-    node_id_map: HashMap<osm::NodeID, NodeID> // mapping: external osm nodeid -> internal graph node id (which is just index)
+    node_id_map: HashMap<osm::NodeID, NodeIndex> // mapping: external osm nodeid -> internal graph node id (which is just index)
 }
 
 impl Graph {
     // constructor function
-    pub fn new(adj_edges: HashMap<NodeID, Vec<Edge>>, nodes: HashMap<NodeID, Node>) -> Self {
-
-        let nodes2 = nodes.into_values().collect::<Vec<Node>>(); // turbo-fish
+    pub fn build(used_nodes:HashMap<osm::NodeID, Node>, used_ways:Vec<osm::Way>) -> Self {
+        let nodes2 = used_nodes.into_values().collect::<Vec<Node>>(); // turbo-fish
         let mut node_id_map = HashMap::new();
         let mut next_index = 0;
         for n in &nodes2 {
-            node_id_map.insert(n.id, NodeID(next_index));
+            node_id_map.insert(n.id, NodeIndex(next_index));
             next_index+=1;
         }
 
-        Graph {
-            adj_edges,
-            // nodes,
-            nodes2,
-            node_id_map,
+        // adj_edges (2-D data structure):
+        //  node id 1 -> [edge1, eddge2, ]
+        //  node id 2 -> [edge3, eddge4, ]
+        //  node id 3 -> [edge6, eddge7, ]
+        //  node id 4 -> [edge8, eddge9, ]
+
+        let mut adj_edges: Vec<Vec<Edge>> = Vec::new();
+        
+        for curr_way in used_ways {
+            // iterate curr.nodes pairwise (each pair is an edge)
+            for curr_node_index in 0..curr_way.nodes.len()-1 {
+                let next_node_index = curr_node_index+1;
+                let curr_node_id = curr_way.nodes[curr_node_index];
+                let next_node_id = curr_way.nodes[next_node_index];
+
+                let forward_edge = Edge {
+                    from_node: node_id_map[&curr_node_id], // osm node id -> node index
+                    to_node: node_id_map[&next_node_id],
+                    distance: curr_way.distances[curr_node_index]
+                };
+
+                let reverse_edge = Edge {
+                    from_node: node_id_map[&next_node_id],
+                    to_node: node_id_map[&curr_node_id],
+                    distance: curr_way.distances[curr_node_index],
+                };
+
+                adj_edges[node_id_map[&curr_node_id].0].push(forward_edge);
+                adj_edges[node_id_map[&next_node_id].0].push(reverse_edge);
+            }
         }
-    } 
+
+
+        Graph { adj_edges, nodes2, node_id_map }                 
+    }
 }
 
 impl Graph {
-    pub fn for_each_node(&self) -> impl Iterator<Item = &NodeID>{
-        self.adj_edges.keys()
+    // prev: iterator over osm node 1, osm node 2, ...
+    // now: iterator over index valus like 0, 1, ..., nodes length -1
+    pub fn for_each_node(&self) -> impl Iterator<Item = NodeIndex>{
+        (0..self.nodes2.len()).map(|i| NodeIndex(i))
     }
-    pub fn adjacent_edges(&self, nodeId : NodeID) -> Option<&Vec<Edge>> /* Option<&[Edge]> */ { // zero length
-        self.adj_edges.get(&nodeId)
+
+    pub fn adjacent_edges(&self, nodeId : NodeIndex) -> Option<&Vec<Edge>> /* Option<&[Edge]> */ { // zero length
+        self.adj_edges.get(nodeId.0) // safe version: index out of range it returns None
+        // self.adj_edges[nodeId.0] // non-safe: index out of range will panic
     }
+
     // distinguish external osm id vs internal index-based id.
-    pub fn get_latlon(&self, nodeId : NodeID) -> Option<LatLon> {
+    pub fn get_latlon(&self, nodeId : NodeIndex) -> Option<LatLon> {
         Some(self.nodes2[nodeId.0].location) // or better change the return type to just LatLong intead of Option<LatLon>.
 
         // match self.nodes.get(&nodeId) {
@@ -119,7 +153,7 @@ pub struct Node {
 }
 
 #[derive(Hash, Eq, PartialEq, PartialOrd, Debug, Clone, Copy)]
-pub struct NodeID(pub usize); 
+pub struct NodeIndex(pub usize); 
 
 #[derive(Clone)]
 struct EdgeID(i64);
@@ -127,14 +161,14 @@ struct EdgeID(i64);
 // only travel from <from_node> to <to_node>
 pub struct Edge {
     // id: EdgeID,
-    pub from_node: NodeID,
-    pub to_node: NodeID,
+    pub from_node: NodeIndex,
+    pub to_node: NodeIndex,
     pub distance: f64,
 }
 
 #[derive(Debug, PartialEq)]
 struct PQItem {
-    id: NodeID,
+    id: NodeIndex,
     distance: f64,
 }
 
@@ -158,11 +192,11 @@ impl Eq for PQItem {}
 #[derive(Debug)]
 pub struct NoRouteFound; // equivalent to ()
 
-pub fn shortest_path(g:&Graph, s: NodeID, t: NodeID) -> Result<(f64, Vec<NodeID>), NoRouteFound> {
+pub fn shortest_path(g:&Graph, s: NodeIndex, t: NodeIndex) -> Result<(f64, Vec<NodeIndex>), NoRouteFound> {
     // let mut dist:HashMap<NodeID, f64> = HashMap::new();
     // let mut prev:HashMap<NodeID, NodeID> = HashMap::new();
     let mut dist = vec![f64::INFINITY; g.get_total_nodes()]; // indexed by internal `NodeID`
-    let mut prev = vec![Option::<NodeID>::None; g.get_total_nodes()];
+    let mut prev = vec![Option::<NodeIndex>::None; g.get_total_nodes()];
 
     let mut pq:BinaryHeap<PQItem> = BinaryHeap::new();
     dist.insert(s.0, 0.0);
@@ -262,17 +296,17 @@ fn test_f64() {
 fn test_pq() {
     let mut pg : BinaryHeap<PQItem> = BinaryHeap::new();
     pg.push(PQItem{
-        id: NodeID(1),
+        id: NodeIndex(1),
         distance: 1.0
     });
 
     pg.push(PQItem{
-        id: NodeID(2),
+        id: NodeIndex(2),
         distance: 5.0
     });
 
     pg.push(PQItem{
-        id: NodeID(3),
+        id: NodeIndex(3),
         distance: 2.0
     });
 

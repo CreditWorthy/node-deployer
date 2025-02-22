@@ -6,6 +6,7 @@ pub mod graph;
 pub mod parser;
 pub mod server;
 pub mod osm;
+pub mod spatialindex;
 
 #[test]
 fn benchtest() {
