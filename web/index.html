@@ -1,0 +1,45 @@
+<html>
+    <head>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""/>
+
+        <style>
+            #map { height: 600px; }
+        </style>
+
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+    </head>
+    <body>
+        <div id="map"></div>
+        <script>
+            var map = L.map('map').setView([38.537473,-75.057298], 13);
+
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+
+            // var marker = L.marker([38.692588,-75.382757]).addTo(map);
+
+            function addMarkersToMap(markers) {
+                L.polyline(markers).addTo(map)
+            }
+
+            fetch("http://localhost:3000/nav?orig=38.526184,-75.128657&dest=39.74587,-75.54285", {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                addMarkersToMap(data.path)
+                console.log(data)
+            })
+
+        </script>
+    </body>
+</html>
